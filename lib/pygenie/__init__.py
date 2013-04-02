@@ -2,6 +2,7 @@
 
 import os
 import sys
+import traceback
 from glob import glob
 from optparse import OptionParser
 
@@ -45,6 +46,16 @@ def find_module(fqn):
     raise Exception('invalid module')
 
 
+def find_dir(fqn):
+    items = []
+    for f in glob(os.path.join(fqn, '*')):
+        if os.path.isfile(f) and f.endswith('.py'):
+            items.append(os.path.abspath(f))
+        elif os.path.isdir(f):
+            items += find_dir(os.path.abspath(f))
+    return items
+
+
 def main():
     from optparse import OptionParser
 
@@ -55,25 +66,32 @@ def main():
     parser = CommandParser(parser, COMMANDS)
     command, options, args = parser.parse_args()
 
-    items = set()
+    items = []
     for arg in args:
         if os.path.isdir(arg):
-            for f in glob(os.path.join(arg, '*.py')):
-                if os.path.isfile(f):
-                    items.add(os.path.abspath(f))
+            items += find_dir(arg)
+            #for f in glob(os.path.join(arg, '*.py')):
+            #    if os.path.isfile(f):
+            #        items.add(os.path.abspath(f))
         elif os.path.isfile(arg):
-            items.add(os.path.abspath(arg))
+            items.append(os.path.abspath(arg))
         else:
             # this should be a package'
-            items.add(find_module(arg))
+            items.append(find_module(arg))
+            
+    items = set(items)
 
     for item in items:
         code = open(item).read()
         if command in ('all', 'complexity'):
-            stats = cc.measure_complexity(code, item)
-            pp = cc.PrettyPrinter(sys.stdout, verbose=options.verbose)
-            pp.pprint(item, stats)
-
+            try:
+                stats = cc.measure_complexity(code, item)
+                pp = cc.PrettyPrinter(sys.stdout, verbose=options.verbose)
+                pp.pprint(item, stats)
+            except Exception, e:
+                sys.stdout.write('Error %s while measuring %s' % (str(e), item))
+                traceback.print_exc()
+                continue
 
 if __name__ == '__main__':
     main()
